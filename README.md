@@ -72,7 +72,8 @@ The crescent is looked for on the **evening** that ends the month, so the first 
 They are generated at build time by `tools/moongrid` (in this repo), not downloaded:
 
 - Moon and sun positions from [Astronomy Engine](https://github.com/cosinekitty/astronomy) (MIT, Don Cross), the same engine the Kotlin app uses for the on-phone verdict, so the map and the verdict cannot disagree.
-- Coastlines from Natural Earth 110m land polygons (public domain).
+- The map itself: Natural Earth 1:50m country polygons (public domain), drawn as a pale sea, warm land and thin borders in Mercator between 60N and 60S.
+- The bands are a 45% tint over that map, not blocks of colour, so sea, land and country borders stay readable underneath.
 - No image from moonsighting.com or any other site is used, copied or hotlinked. The criterion itself is published science; the pictures are arithmetic.
 - Regenerate any year with a different criterion or palette: `cd tools/moongrid && bun install && bun run gen.ts`.
 

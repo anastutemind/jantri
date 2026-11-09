@@ -305,6 +305,9 @@ fun MoonScreen(
 @Composable
 private fun BandRow(color: Color, letter: String, text: String) {
     Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+        // Legend swatches stay at full strength: the map shows the same hue at 45% over
+        // the basemap, and a washed chip would make four similar tints hard to tell apart
+        // in a key this small.
         Box(Modifier.size(14.dp).clip(RoundedCornerShape(4.dp)).background(color))
         Spacer(Modifier.width(10.dp))
         Text(letter, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(18.dp))

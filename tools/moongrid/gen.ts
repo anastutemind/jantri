@@ -1,11 +1,11 @@
 // Crescent-visibility world maps for the app's Moon screen.
 //
-// Draws one image per evening: the four Odeh (2004) bands, on a flat world map, with
-// coastlines so a reader can find their own country. Output goes straight into the
-// Android asset tree along with a manifest, so the phone never guesses a filename and
-// never downloads anything.
+// A real map underneath, the four Odeh (2004) bands laid over it translucently: the
+// geography stays readable, and where no sighting is possible you see the map itself
+// rather than a solid block of colour.
 //
-// Run:  bun install && bun run gen.ts
+// Run:  bun install && bun run gen.ts            # all maps
+//       bun run gen.ts 1448rmd_2027-02-07        # one map, for drawing experiments
 // Out:  app/src/main/assets/moon/*.webp, manifest.json, zones.json
 //
 // Criterion (Odeh 2004, published by the International Astronomical Center):
@@ -14,7 +14,6 @@
 //   B V >= 2.00   visible with optical aid, and possibly then by eye
 //   C V >= -0.96  binoculars or telescope only
 //   D below       not visible even with optical aid
-// where ARCV is the arc of vision at sunset and W is the crescent width in arcminutes.
 
 import * as A from "astronomy-engine";
 import sharp from "sharp";
@@ -28,25 +27,38 @@ const REPO = join(HERE, "..", "..");
 /** Where the maps land. Override with MOON_OUT to render into a scratch folder. */
 const OUT = process.env.MOON_OUT ?? join(REPO, "app", "src", "main", "assets", "moon");
 
-const IMG_W = 1200;
-const IMG_H = 600;
-const COLS = 361; // longitude -180..180, one degree per cell
-const ROWS = 121; // latitude 60N..60S, one degree per cell
+const IMG_W = 2000;
+const IMG_H = 839; // Mercator between 60N and 60S keeps this aspect
+const LON_STEP = 0.5;
+const LAT_STEP = 0.5;
+const LAT_MAX = 60;
+const LAT_MIN = -60;
+const COLS = Math.round(360 / LON_STEP) + 1; // 721
+const ROWS = Math.round((LAT_MAX - LAT_MIN) / LAT_STEP) + 1; // 241
 
 /** Hijri years and the three months the app shows. */
 const YEARS = [1447, 1452];
 const MONTHS: Record<string, number> = { rmd: 9, shw: 10, zhj: 12 };
 
-// Palette. The app's legend uses these exact values, so the colours in the picture and
-// the squares beside the words are the same pixels.
-const C = {
-  bg: [0xf2, 0xf1, 0xec], // uncoloured, ocean, background
+// Band colours. The app's legend draws these at the same alpha, so the square beside
+// the words matches the pixels it names.
+const BAND = {
   A: [0x1e, 0x7a, 0x3c],
   B: [0xc2, 0x18, 0x5b],
   C: [0x15, 0x65, 0xc0],
   D: [0xc6, 0x28, 0x28],
 } as const;
-const ZONE_RGB = [C.bg, C.A, C.B, C.C, C.D];
+const BAND_ORDER = ["A", "B", "C", "D"] as const;
+const BAND_ALPHA = Number(process.env.MOON_ALPHA ?? 0.45);
+
+// Basemap: pale sea, warm land, thin borders, so the tint reads as a wash rather than
+// a paint-over.
+const MAP = {
+  ocean: "#AECBE2",
+  land: "#F7F2E2",
+  edge: "#6F7C74",
+  border: "#8E8878",
+};
 
 interface Cell {
   zone: number;
@@ -74,17 +86,17 @@ function evalCell(lat: number, lon: number, dayStart: Date, conjunction: Date): 
   const arcv = moonAlt - sunAlt;
   const elong = A.AngleFromSun(A.Body.Moon, sunset);
   const distanceKm = A.Illumination(A.Body.Moon, sunset).geo_dist * 149597870.7;
-  const semiDiameter = Math.asin(1737.4 / distanceKm) * 180 / Math.PI * 60;
+  const semiDiameter = ((Math.asin(1737.4 / distanceKm) * 180) / Math.PI) * 60;
   // Crescent width is the illuminated sliver across the disc: semi-diameter times
   // (1 - cos(arc of light)). Zero at conjunction, the full diameter at full moon.
-  const w = semiDiameter * (1 - Math.cos(elong * Math.PI / 180));
+  const w = semiDiameter * (1 - Math.cos((elong * Math.PI) / 180));
   const V = arcv - (-0.1018 * w * w * w + 0.7319 * w * w - 6.3226 * w + 7.1651);
 
   let zone: number;
-  if (sunset.getTime() < conjunction.getTime()) zone = 4; // new moon has not happened yet
+  if (sunset.getTime() < conjunction.getTime()) zone = 4; // the new moon has not happened yet
   else if (moonAlt < 0) zone = 4; // the moon was already below the horizon at sunset
   else if (V >= 5.65) zone = 1;
-  else if (V >= 2.00) zone = 2;
+  else if (V >= 2.0) zone = 2;
   else if (V >= -0.96) zone = 3;
   else zone = 4;
 
@@ -93,8 +105,7 @@ function evalCell(lat: number, lon: number, dayStart: Date, conjunction: Date): 
 
 /**
  * Three points checked against an independent implementation before anything is drawn.
- * Hyderabad and Al-Madinah, the evenings before Ramadan 1448. A difference over 0.05
- * degrees aborts the run: a silently wrong map is worse than no map.
+ * A difference over 0.05 degrees aborts the run: a silently wrong map is worse than no map.
  */
 function sanity(): void {
   const cases = [
@@ -135,10 +146,7 @@ function addDays(iso: string, n: number): string {
   return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
 }
 
-/**
- * Each Hijri month is anchored to its own conjunction: the new moon is found from the
- * calendar's approximate month start, then the two evenings after it are rendered.
- */
+/** Anchors each Hijri month to its own conjunction, then takes the two evenings after. */
 function buildJobs(): Array<{ hijri: number; code: string; evening: string; conjunction: Date }> {
   const jobs: Array<{ hijri: number; code: string; evening: string; conjunction: Date }> = [];
   const newMoons: Date[] = [];
@@ -167,25 +175,33 @@ function buildJobs(): Array<{ hijri: number; code: string; evening: string; conj
   return jobs;
 }
 
-/** Coastlines from Natural Earth 110m land polygons (public domain), as an SVG overlay. */
-function coastlineSvg(): string {
-  const geo = JSON.parse(readFileSync(join(HERE, "ne_110m_land.geojson"), "utf8"));
-  const project = (lon: number, lat: number): [number, number] => [
-    ((lon + 180) / 360) * IMG_W,
-    ((60 - lat) / 120) * IMG_H,
-  ];
+// ---------- projection ----------
+// Mercator between 60N and 60S: the view the printed crescent tables use, where the
+// bands keep their familiar shape.
+
+const mercator = (latDeg: number): number => {
+  const r = (latDeg * Math.PI) / 180;
+  return Math.log(Math.tan(Math.PI / 4 + r / 2));
+};
+const MERC_TOP = mercator(LAT_MAX);
+const MERC_BOTTOM = mercator(LAT_MIN);
+
+const projectX = (lon: number): number => ((lon + 180) / 360) * IMG_W;
+const projectY = (lat: number): number => ((mercator(lat) - MERC_TOP) / (MERC_BOTTOM - MERC_TOP)) * IMG_H;
+
+/** Country polygons of Natural Earth 1:50m (public domain), clamped to the view. */
+function countryPaths(): string {
+  const geo = JSON.parse(readFileSync(join(HERE, "ne_50m_admin_0_countries.geojson"), "utf8"));
   let path = "";
   const ring = (coords: number[][]) => {
     let previous: number[] | null = null;
-    for (const [lon, lat] of coords) {
-      if (lat < -60 || lat > 60) {
-        previous = null;
-        continue;
-      }
-      const [x, y] = project(lon, lat);
+    for (const [lon, rawLat] of coords) {
+      const lat = Math.max(LAT_MIN, Math.min(LAT_MAX, rawLat));
+      const x = projectX(lon).toFixed(1);
+      const y = projectY(lat).toFixed(1);
       const wrapsDateline = previous !== null && Math.abs(lon - previous[0]) > 180;
-      path += (previous === null || wrapsDateline ? "M" : "L") + x.toFixed(2) + "," + y.toFixed(2);
-      previous = [lon, lat];
+      path += `${previous === null || wrapsDateline ? "M" : "L"}${x},${y}`;
+      previous = [lon, rawLat];
     }
   };
   for (const feature of geo.features) {
@@ -194,15 +210,42 @@ function coastlineSvg(): string {
     if (g.type === "Polygon") g.coordinates.forEach(ring);
     else if (g.type === "MultiPolygon") g.coordinates.forEach((polygon: number[][][]) => polygon.forEach(ring));
   }
+  return path;
+}
+
+/** The actual map: pale sea, land fill, country borders. */
+function basemapSvg(path: string): string {
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" width="${IMG_W}" height="${IMG_H}" viewBox="0 0 ${IMG_W} ${IMG_H}">` +
-    `<path d="${path}" fill="none" stroke="#3A3A3A" stroke-opacity="0.55" stroke-width="0.8"/></svg>`
+    `<rect width="${IMG_W}" height="${IMG_H}" fill="${MAP.ocean}"/>` +
+    `<path d="${path}" fill="${MAP.land}" stroke="${MAP.border}" stroke-width="0.9" stroke-linejoin="round"/>` +
+    `</svg>`
+  );
+}
+
+/** Coastlines and a light graticule above the tint, so the map stays legible through it. */
+function detailSvg(path: string): string {
+  let grid = "";
+  for (let lon = -180; lon <= 180; lon += 30) {
+    const x = projectX(lon).toFixed(1);
+    grid += `M${x},0L${x},${IMG_H}`;
+  }
+  for (let lat = -60; lat <= 60; lat += 30) {
+    const y = projectY(lat).toFixed(1);
+    grid += `M0,${y}L${IMG_W},${y}`;
+  }
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${IMG_W}" height="${IMG_H}" viewBox="0 0 ${IMG_W} ${IMG_H}">` +
+    `<path d="${grid}" fill="none" stroke="${MAP.edge}" stroke-opacity="0.16" stroke-width="0.5"/>` +
+    `<path d="${path}" fill="none" stroke="${MAP.edge}" stroke-opacity="0.75" stroke-width="0.8" stroke-linejoin="round"/>` +
+    `</svg>`
   );
 }
 
 async function render(
   job: { hijri: number; code: string; evening: string; conjunction: Date },
-  coastline: string,
+  base: string,
+  detail: string,
 ): Promise<{ file: string; evening: string; key: string; zones: Record<string, number> }> {
   const [y, m, d] = job.evening.split("-").map(Number);
   const dayStart = new Date(Date.UTC(y, m - 1, d));
@@ -210,70 +253,84 @@ async function render(
   const counts = [0, 0, 0, 0, 0];
 
   for (let r = 0; r < ROWS; r++) {
-    const lat = 60 - r;
+    const lat = LAT_MAX - r * LAT_STEP;
     for (let c = 0; c < COLS; c++) {
-      const cell = evalCell(lat, -180 + c, dayStart, job.conjunction);
+      const cell = evalCell(lat, -180 + c * LON_STEP, dayStart, job.conjunction);
       const zone = cell ? cell.zone : 0;
       grid[r * COLS + c] = zone;
       counts[zone]++;
     }
   }
 
-  const pixels = Buffer.alloc(IMG_W * IMG_H * 3);
+  // Transparent overlay: only the bands carry colour, everything else stays map.
+  const overlay = Buffer.alloc(IMG_W * IMG_H * 4);
+  const alpha = Math.round(BAND_ALPHA * 255);
   for (let r = 0; r < ROWS; r++) {
-    const y0 = Math.floor((r * IMG_H) / ROWS);
-    const y1 = Math.floor(((r + 1) * IMG_H) / ROWS);
+    const latTop = LAT_MAX - r * LAT_STEP;
+    const latBottom = latTop - LAT_STEP;
+    const y0 = Math.max(0, Math.round(projectY(latTop)));
+    const y1 = Math.min(IMG_H, Math.max(y0 + 1, Math.round(projectY(latBottom))));
     for (let c = 0; c < COLS; c++) {
-      const [red, green, blue] = ZONE_RGB[grid[r * COLS + c]];
-      const x0 = Math.floor((c * IMG_W) / COLS);
-      const x1 = Math.floor(((c + 1) * IMG_W) / COLS);
+      const zone = grid[r * COLS + c];
+      if (zone === 0) continue;
+      const [red, green, blue] = BAND[BAND_ORDER[zone - 1]];
+      const x0 = Math.max(0, Math.round(projectX(-180 + c * LON_STEP)));
+      const x1 = Math.min(IMG_W, Math.max(x0 + 1, Math.round(projectX(-180 + (c + 1) * LON_STEP))));
       for (let yy = y0; yy < y1; yy++) {
         for (let xx = x0; xx < x1; xx++) {
-          const offset = (yy * IMG_W + xx) * 3;
-          pixels[offset] = red;
-          pixels[offset + 1] = green;
-          pixels[offset + 2] = blue;
+          const offset = (yy * IMG_W + xx) * 4;
+          overlay[offset] = red;
+          overlay[offset + 1] = green;
+          overlay[offset + 2] = blue;
+          overlay[offset + 3] = alpha;
         }
       }
     }
   }
 
   const file = `${job.hijri}${job.code}_${job.evening}.webp`;
-  await sharp(pixels, { raw: { width: IMG_W, height: IMG_H, channels: 3 } })
-    .composite([{ input: Buffer.from(coastline) }])
-    .webp({ quality: 82 })
+  await sharp(Buffer.from(base))
+    .composite([
+      { input: overlay, raw: { width: IMG_W, height: IMG_H, channels: 4 } },
+      { input: Buffer.from(detail) },
+    ])
+    .webp({ quality: 84 })
     .toFile(join(OUT, file));
 
   const total = COLS * ROWS;
   const share = (n: number) => Math.round((n / total) * 1000) / 10;
   const zones = { A: share(counts[1]), B: share(counts[2]), C: share(counts[3]), D: share(counts[4]) };
-  console.log(
-    `${file}: A=${zones.A}% B=${zones.B}% C=${zones.C}% D=${zones.D}% blank=${share(counts[0])}%`,
-  );
+  console.log(`${file}: A=${zones.A}% B=${zones.B}% C=${zones.C}% D=${zones.D}% blank=${share(counts[0])}%`);
   return { file, evening: job.evening, key: `${job.hijri}${job.code}_${job.evening}`, zones };
 }
 
 async function main(): Promise<void> {
   sanity();
-  if (!existsSync(join(HERE, "ne_110m_land.geojson"))) {
-    throw new Error("ne_110m_land.geojson is missing from tools/moongrid");
+  if (!existsSync(join(HERE, "ne_50m_admin_0_countries.geojson"))) {
+    throw new Error("ne_50m_admin_0_countries.geojson is missing from tools/moongrid");
   }
   mkdirSync(OUT, { recursive: true });
-  const jobs = buildJobs();
-  const coastline = coastlineSvg();
-  console.log(`coastline overlay ${(coastline.length / 1024).toFixed(0)} KB, ${jobs.length} images`);
+  const only = process.argv[2];
+  const jobs = buildJobs().filter((j) => !only || `${j.hijri}${j.code}_${j.evening}` === only);
+  if (jobs.length === 0) throw new Error(`no job matched ${only}`);
+  const path = countryPaths();
+  const base = basemapSvg(path);
+  const detail = detailSvg(path);
+  console.log(`basemap ${(base.length / 1024).toFixed(0)} KB, grid ${COLS}x${ROWS}, ${jobs.length} images`);
 
   const manifest: Record<string, Record<string, Array<{ evening: string; file: string }>>> = {};
   const zones: Record<string, Record<string, number>> = {};
   for (const job of jobs) {
-    const result = await render(job, coastline);
+    const result = await render(job, base, detail);
     (manifest[job.hijri] ??= {})[job.code] ??= [];
     manifest[job.hijri][job.code].push({ evening: result.evening, file: result.file });
     zones[result.key] = result.zones;
   }
-  writeFileSync(join(OUT, "manifest.json"), JSON.stringify(manifest, null, 1) + "\n");
-  writeFileSync(join(OUT, "zones.json"), JSON.stringify(zones, null, 1) + "\n");
-  console.log(`DONE: ${jobs.length} maps, ${Object.keys(zones).length} zone records in ${OUT}`);
+  if (!only) {
+    writeFileSync(join(OUT, "manifest.json"), JSON.stringify(manifest, null, 1) + "\n");
+    writeFileSync(join(OUT, "zones.json"), JSON.stringify(zones, null, 1) + "\n");
+  }
+  console.log(`DONE: ${jobs.length} maps${only ? "" : `, ${Object.keys(zones).length} zone records`} in ${OUT}`);
 }
 
 main().catch((error) => {
