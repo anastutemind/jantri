@@ -6,6 +6,9 @@ import android.os.Looper
 import android.view.View
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
@@ -15,6 +18,7 @@ import androidx.test.core.app.ActivityScenario
 import com.anaskhan.jantri.core.Settings
 import com.anaskhan.jantri.ui.DuasScreen
 import com.anaskhan.jantri.ui.HomeScreen
+import com.anaskhan.jantri.ui.MoonScreen
 import com.anaskhan.jantri.ui.JantriTheme
 import com.anaskhan.jantri.ui.SettingsScreen
 import com.anaskhan.jantri.ui.TableScreen
@@ -94,6 +98,28 @@ class ScreenshotTest {
 
     @Test
     fun duas() = shoot("03-duas") { DuasScreen() }
+
+    @Test
+    fun moon() = shoot("05-moon") {
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState(420))) {
+            MoonScreen(
+                settings = settings,
+                today = LocalDate.of(2026, 11, 9),
+                onUseRamadanStart = {},
+            )
+        }
+    }
+
+    @Test
+    fun moonVerdict() = shoot("06-moon-city") {
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState(1780))) {
+            MoonScreen(
+                settings = settings,
+                today = LocalDate.of(2026, 11, 9),
+                onUseRamadanStart = {},
+            )
+        }
+    }
 
     @Test
     fun timings() = shoot("04-timing") {

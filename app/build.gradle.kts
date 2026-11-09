@@ -27,8 +27,8 @@ android {
         applicationId = "com.anaskhan.jantri"
         minSdk = 26
         targetSdk = 36
-        versionCode = 3
-        versionName = "1.0.2"
+        versionCode = 4
+        versionName = "1.1.0"
         resourceConfigurations += listOf("en")
     }
 
@@ -85,6 +85,10 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.core:core-splashscreen:1.0.1")
+
+    // Moon position for the crescent screen. MIT, Don Cross, same engine the bundled
+    // visibility maps were drawn with, so a city's verdict and the map agree.
+    implementation("com.github.cosinekitty:astronomy:2.1.19")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 

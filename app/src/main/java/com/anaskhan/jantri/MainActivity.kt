@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.AutoStories
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -45,6 +46,7 @@ import com.anaskhan.jantri.notify.Scheduler
 import com.anaskhan.jantri.ui.DuasScreen
 import com.anaskhan.jantri.ui.HomeScreen
 import com.anaskhan.jantri.ui.JantriTheme
+import com.anaskhan.jantri.ui.MoonScreen
 import com.anaskhan.jantri.ui.SettingsScreen
 import com.anaskhan.jantri.ui.TableScreen
 
@@ -113,8 +115,8 @@ class MainActivity : ComponentActivity() {
                             NavigationBarItem(
                                 selected = tab == 2,
                                 onClick = { tab = 2 },
-                                icon = { Icon(Icons.Filled.AutoStories, contentDescription = null) },
-                                label = { Text("Duas") },
+                                icon = { Icon(Icons.Filled.Visibility, contentDescription = null) },
+                                label = { Text("Moon") },
                                 colors = NavigationBarItemDefaults.colors(
                                     selectedIconColor = MaterialTheme.colorScheme.primary,
                                     selectedTextColor = MaterialTheme.colorScheme.primary,
@@ -123,6 +125,16 @@ class MainActivity : ComponentActivity() {
                             NavigationBarItem(
                                 selected = tab == 3,
                                 onClick = { tab = 3 },
+                                icon = { Icon(Icons.Filled.AutoStories, contentDescription = null) },
+                                label = { Text("Duas") },
+                                colors = NavigationBarItemDefaults.colors(
+                                    selectedIconColor = MaterialTheme.colorScheme.primary,
+                                    selectedTextColor = MaterialTheme.colorScheme.primary,
+                                ),
+                            )
+                            NavigationBarItem(
+                                selected = tab == 4,
+                                onClick = { tab = 4 },
                                 icon = { Icon(Icons.Filled.Tune, contentDescription = null) },
                                 label = { Text("Timing") },
                                 colors = NavigationBarItemDefaults.colors(
@@ -138,14 +150,22 @@ class MainActivity : ComponentActivity() {
                             0 -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
                                 HomeScreen(
                                     settings = settings,
-                                    onOpenSettings = { tab = 3 },
+                                    onOpenSettings = { tab = 4 },
                                     onOpenTable = { tab = 1 },
                                 )
                             }
                             1 -> Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-                                TableScreen(settings = settings, onOpenSettings = { tab = 3 })
+                                TableScreen(settings = settings, onOpenSettings = { tab = 4 })
                             }
                             2 -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
+                                MoonScreen(
+                                    settings = settings,
+                                    onUseRamadanStart = { date ->
+                                        update(settings.copy(ramadanStartOverride = date.toString()))
+                                    },
+                                )
+                            }
+                            3 -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
                                 DuasScreen()
                             }
                             else -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {

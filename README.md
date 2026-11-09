@@ -53,6 +53,31 @@ The defaults are not guesses. They are the margins a real sheet uses: with 18°/
 
 Ramadan day 1 defaults to the Umm al-Qura date from the Hijri calendar shipped with Android (`java.time.chrono.HijrahDate`), which for 1447 is 18 February 2026, one day before India actually began. The Timing screen shifts day 1 by up to three days in either direction, so the month number, the date column and the alerts all follow what your masjid announced rather than what a printed sheet had to assume.
 
+## The moon sighting screen
+
+Day 1 is not a calendar fact, it is a sighting, so 1.1.0 adds a Moon tab that shows the reasoning instead of hiding it:
+
+- **The expected first day** for Ramadan, Eid al-Fitr and Eid al-Adha of the current Hijri year, labelled *expected* and never *announced*.
+- **The map of where the crescent can be seen** on the one or two evenings before the month starts, drawn with the Odeh (2004) criterion in four bands: A easily visible with the naked eye, B visible with optical aid and possibly by eye, C binoculars or telescope only, D not visible at all.
+- **A verdict for your own city**, computed on the phone from your coordinates: the moon's height at sunset, the arc of vision, the elongation, the crescent width and the resulting V number, with plain words for what it means.
+- **The gap against the arithmetic calendar.** The app shows what `java.time`'s Umm al-Qura Hijri calendar says next to what the crescent says. For 1448 they disagree on both Eids, a day early: Umm al-Qura puts Eid al-Fitr on 9 March 2027 and Eid al-Adha on 16 May, while the criterion gives 10 March and 17 May.
+- **One tap to adopt it**: "Make this Ramadan day 1" writes the sighting date into the existing day-1 override, so every row, countdown and alert follows.
+
+### The date rule, stated once
+
+The crescent is looked for on the **evening** that ends the month, so the first day of the new month is that evening **plus one day**. Eid al-Fitr is 1 Shawwal, no arithmetic needed. **Eid al-Adha is 10 Dhul Hijjah, so it sits nine days after the first of Dhul Hijjah, not ten** — counting day one as the first day is the whole trap, and a +10 offset ships every Eid al-Adha a day late.
+
+### Where the maps come from
+
+They are generated at build time by `tools/moongrid` (in this repo), not downloaded:
+
+- Moon and sun positions from [Astronomy Engine](https://github.com/cosinekitty/astronomy) (MIT, Don Cross), the same engine the Kotlin app uses for the on-phone verdict, so the map and the verdict cannot disagree.
+- Coastlines from Natural Earth 110m land polygons (public domain).
+- No image from moonsighting.com or any other site is used, copied or hotlinked. The criterion itself is published science; the pictures are arithmetic.
+- Regenerate any year with a different criterion or palette: `cd tools/moongrid && bun install && bun run gen.ts`.
+
+The app still makes no network calls, holds no accounts and collects nothing.
+
 ## Alerts
 
 - Sehri warning N minutes before sehri ends (default 15).

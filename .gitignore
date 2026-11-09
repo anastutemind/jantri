@@ -13,3 +13,6 @@ app/build/
 keystore.properties
 *.jks
 *.keystore
+
+# Kotlin incremental caches
+.kotlin/
